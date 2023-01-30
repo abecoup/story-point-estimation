@@ -4,9 +4,10 @@ This repository aims to provide further information and content relevant to the 
 
 This work serves as my masters capstone research at Rochester Institute of Technology during the Spring 2023 semester.
 
-##Acknowledgements
+## Acknowledgements
 
 Advisor: [https://zhe-yu.github.io/](Zhe Yu)
+
 Original Authors:
 - [Vali Tawosi](https://vtawosi.github.io/)
 - [Afnan Al-Subaihin](https://afnan.ws/)
