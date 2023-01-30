@@ -6,7 +6,7 @@ This work serves as my masters capstone research at Rochester Institute of Techn
 
 ## Acknowledgements
 
-Advisor: [https://zhe-yu.github.io/](Zhe Yu)
+Advisor: [Zhe Yu](https://zhe-yu.github.io/)
 
 Original Authors:
 - [Vali Tawosi](https://vtawosi.github.io/)
