@@ -66,44 +66,39 @@ def purify(text):
 
 
 # Function that builds the vector space
-def vsm(data, weighting='tf', verbose=True):
+def vsm(data, weighting='tf'):
 
-    # Removing URLs
-    # Removing non-alphanumeric characters
+    # Remove URLs
     data = [remove_urls(issue_context) for issue_context in data]
+
+    # Remove non-alphanumeric characters
     data = [purify(issue_context) for issue_context in data]
+
+    # Remove empty issue-contexts
+    data = [ic for ic in data if len(ic) > 0]
 
     # The rest of the pre-processing happens in CountVectorizer, thus they are passed in using a CountVectorizer object
     # By default CountVectorizer makes lower case, removes punctuation, and only considers words with at least two characters
-    vectorizer = CountVectorizer(stop_words = stopwords.words('english') + extended_stop_words)
-    dtm = vectorizer.fit_transform(data)
+    vectorizer = CountVectorizer(stop_words = stopwords.words('english') + extended_stop_words,
+                                    min_df=1, # exclude any terms that do not appear in any document in the corpus
+                                    )
+    doc_term_matrix = vectorizer.fit_transform(data)
 
-    if verbose:
-        print("Corpus Dimensions, before cleaning: ", dtm.shape)
-    
-    # Remove unused terms (terms with zero TF score)
-    dtm = dtm[:, dtm.getnnz(0) > 0]
-    # Remove empty documents (issue-context)
-    dtm = dtm[dtm.getnnz(1) > 0, :]
-    
-    if verbose:
-        print("Corpus Dimensions, after cleaning: ", dtm.shape)
-    
-    dtm_array = dtm.toarray()
+    # Convert the document-term matrix to Gensim's corpus format
+    corpus = Sparse2Corpus(doc_term_matrix, documents_columns=False)
 
-    id2word = {i: word for i, word in enumerate(vectorizer.get_feature_names_out())}
+    # Create a dictionary mapping words to their integer ids
+    id2word = Dictionary.from_corpus(corpus, id2word=dict((id, word) for word, id in vectorizer.vocabulary_.items()))
 
-    term_freqs = dtm.sum(axis=0)
+    term_freqs = doc_term_matrix.sum(axis=0)
     assert not np.any(term_freqs == 0), "Some terms have zero frequency."
-    doc_lens = dtm.sum(axis=1)
+    doc_lens = doc_term_matrix.sum(axis=1)
     assert not np.any(doc_lens == 0), "Some documents have zero length."
     
     return {'data': data,
-            'dtm': dtm,
-            'dtm_array': dtm_array,
-            'term_freq': term_freqs.A1, 
-            'doc_lengths': doc_lens.A1,
-            'id2word': id2word}
+            'dtm': doc_term_matrix,
+            'id2word': id2word,
+            'corpus': corpus}
 
 
 # Function that builds a vector space out of LDA topics.
@@ -152,12 +147,13 @@ def find_best_t(training, validation):
     # training/validation are sparse matrices
 
     start_time = time.time()
-    ts = list(range(15, 2001, 250))
+    ts = list(range(15, 2001, 500)) # change back to 250
     models = []
-    corpus = Sparse2Corpus(training['dtm'])
+    corpus = training['corpus']
     id2word = training['id2word']
 
     for t in ts:
+        print("Generating LDA model for t=" + str(t))
         lda_model = LdaModel(
             corpus=corpus,
             id2word=id2word,
@@ -165,8 +161,7 @@ def find_best_t(training, validation):
             alpha=1/t,
             eta=0.1, # similir to delta
             iterations=300,
-            passes=50,
-            eval_every=None
+            passes=50
         )
         models.append(lda_model)
 
@@ -174,7 +169,7 @@ def find_best_t(training, validation):
     time_taken = end_time - start_time
     print(f"Time taken to generate LDA models: {time_taken:.2f} seconds")
 
-    perps = [model.log_perplexity(Sparse2Corpus(validation['dtm'])) for model in models]
+    perps = [model.log_perplexity(validation['corpus']) for model in models]
     t_perps = list(zip(ts, perps))
     t_perps_df = pd.DataFrame(t_perps, columns=['t', 'perplexity'])
     t = t_perps_df.loc[t_perps_df['perplexity'].idxmin()]
@@ -191,7 +186,7 @@ def find_best_t(training, validation):
 def main():
     train_data = load_data(data_dir_path, "train")
     valid_data = load_data(data_dir_path, "valid")
-    best_lda_model = lda(train_data['issue_context'], valid_data['issue_context'])
+    lda(train_data['issue_context'], valid_data['issue_context'])
     
 
 
