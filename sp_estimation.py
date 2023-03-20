@@ -22,6 +22,12 @@ from gensim.matutils import corpus2csc
 from gensim.models import CoherenceModel
 from gensim.corpora import Dictionary
 from gensim.matutils import Sparse2Corpus
+from sklearn.cluster import AgglomerativeClustering
+from sklearn.metrics.pairwise import cosine_distances
+from sklearn.metrics import silhouette_score
+
+import logging
+logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.DEBUG)
 
 # extended stop words list taken from ee_clust R code
 extended_stop_words = ["a", "aaaaa", "aaaaaa", "aaaaaaa", "aaaaaaaa", "aaaaaaaaaa", "about", "above", "across", "after", "again", "against", "all", "almost", "alone", "along", "already", "also", "although", "always", "am", "among", "an", "and", "another", "any", "anybody", "anyone", "anything", "anywhere", "are",  "aren't", "around", "as", "ask", "asked", "asking", "asks", "at", "away", "b", "back", "be", "became", "because", "become", "becomes", "been", "before", "began", "behind", "being", "beings", "below", "best", "better", "between", "big", "both", "but", "by", "c", "came", "can", "cannot", "can't", "case", "cases", "certain", "certainly", "clear", "clearly", "come", "could", "couldn't", "d", "did", "didn't", "differ", "different", "differently", "do", "does", "doesn't", "doing", "done", "don't", "down", "downed", "downing", "downs", "during", "e", "each", "early", "either", "end", "ended", "ending", "ends", "enough", "even", "evenly", "ever", "every", "everybody", "everyone", "everything", "everywhere", "f", "face", "faces", "fact", "facts", "far", "felt", "few", "find", "finds", "first", "for", "four", "from", "full", "fully", "further", "furthered", "furthering", "furthers", "g", "gave", "general", "generally", "get", "gets", "give", "given", "gives", "go", "going", "good", "goods", "got", "great", "greater", "greatest", "group", "grouped", "grouping", "groups", "h", "had", "hadn't", "has", "hasn't", "have", "haven't", "having", "he", "he'd", "he'll", "her", "here", "here's", "hers", "herself", "he's", "high", "higher", "highest", "him", "himself", "his", "how", "however", "how's", "i", "i'd", "if", "i'll", "i'm", "important", "in", "interest", "interested", "interesting", "interests", "into", "is", "isn't", "it", "its", "it's", "itself", "i've", "j", "just", "k", "keep", "keeps", "kind", "knew", "know", "known", "knows", "l", "large", "largely", "last", "later", "latest", "least", "less", "let", "lets", "let's", "like", "likely", "long", "longer", "longest", "m", "made", "make", "making", "man", "many", "may", "me", "member", "members", "men", "might", "more", "most", "mostly", "mr", "mrs", "much", "must", "mustn't", "my", "myself", "n", "necessary", "need", "needed", "needing", "needs", "never", "new", "newer", "newest", "next", "no", "nobody", "non", "noone", "nor", "not", "nothing", "now", "nowhere", "number", "numbers", "o", "of", "off", "often", "old", "older", "oldest", "on", "once", "one", "only", "open", "opened", "opening", "opens", "or", "order", "ordered", "ordering", "orders", "other", "others", "ought", "our", "ours", "ourselves", "out", "over", "own", "p", "part", "parted", "parting", "parts", "per", "perhaps", "place", "places", "point", "pointed", "pointing", "possible", "q", "quite", "r", "rather", "really", "right",  "s", "said", "same", "saw", "say", "says", "see", "seem", "seemed", "seeming", "seems", "sees",  "shall", "shan't", "she", "she'd", "she'll", "she's", "should", "shouldn't",  "since", "small",  "so", "some", "somebody", "someone", "something", "somewhere", "state", "states", "still", "such", "sure", "t", "take", "taken", "than", "that", "that's", "the", "their", "theirs", "them", "themselves", "then", "there", "therefore", "there's", "these", "they", "they'd", "they'll", "they're", "they've", "thing", "things", "think", "thinks", "this", "those", "though", "thought", "thoughts", "three", "through", "thus", "to", "today", "together", "too", "took", "toward",  "two", "u", "under", "until", "up", "upon", "us", "use", "used", "uses", "v", "very","via", "w", "want", "wanted", "wanting", "wants", "was", "wasn't", "way", "ways", "we", "we'd", "well", "we'll",  "went", "were", "we're", "weren't", "we've", "what", "what's", "when", "when's", "where", "where's", "whether", "which", "while", "who", "whole", "whom", "who's", "whose", "why", "why's", "will", "with", "within", "without", "won't", "work", "worked", "working", "works", "would", "wouldn't", "x", "y", "yes", "yet", "you", "you'd", "you'll", "your", "you're", "yours", "yourself", "yourselves", "you've", "z"]
@@ -65,7 +71,12 @@ def purify(text):
     return re.sub(r'[^a-zA-Z0-9]+', ' ', text)
 
 
-# Function that builds the vector space
+# Vectorizes and cleans data
+# Returns dict of 
+# 'data': passed data 
+# 'dtm': document term matrix
+# 'id2word': id,word pairs for genism LDA model
+# 'corpus': bag-of-words representation of issue-context's
 def vsm(data, weighting='tf'):
 
     # Remove URLs
@@ -101,10 +112,8 @@ def vsm(data, weighting='tf'):
             'corpus': corpus}
 
 
-# Function that builds a vector space out of LDA topics.
-# t is number of topics (if known), leave null to calculate the t that produces 
-# the least perplexity.
-# if t is null, need to send validation data as well.
+# Creates and returns LDA model.
+# If no number of topics (t) is provided then best t is calculated (time intensive)
 def lda(train, valid=None, t=None):
     print("Generating LDA Model..\n")
 
@@ -124,30 +133,34 @@ def lda(train, valid=None, t=None):
             num_topics=t,
             alpha=1/t,
             eta=0.1, # similir to delta
-            iterations=500,
-            passes=50,
-            eval_every=100
+            iterations=300,
+            passes=20,
+            chunksize=1000,
+            eval_every=2,
+            gamma_threshold=0.001
         )
 
     end_time = time.time()
     time_taken = end_time - start_time
     print("Time taken to generate final LDA Model: ", time_taken)
 
-    file_name = f"lda_{t}.rda"
+    file_name = f"lda_{t}.model"
     lda_model.save(file_name)
     print(f"Final LDA model saved to {file_name}")
 
-    p = lda_model.log_perplexity(valid['dtm'])
-    print("The perplexity of this model is", np.exp2(-p))
+    p = lda_model.log_perplexity(valid['corpus'])
+    print("The perplexity of this model is", p)
 
     return lda_model
 
-
+# Creates LDA models with various t values
+# Returns t value based on model with lowest perplexity
 def find_best_t(training, validation):
     # training/validation are sparse matrices
 
     start_time = time.time()
-    ts = list(range(15, 2001, 500)) # change back to 250
+    # ts = list(range(15, 2001, 500)) # change back to 250
+    ts = list(range(5, 16, 5))
     models = []
     corpus = training['corpus']
     id2word = training['id2word']
@@ -161,8 +174,17 @@ def find_best_t(training, validation):
             alpha=1/t,
             eta=0.1, # similir to delta
             iterations=300,
-            passes=50
+            passes=20,
+            chunksize=1000,
+            eval_every=2,
+            gamma_threshold=0.001
         )
+        lda_model.save(f'lda_{t}.model')
+        print(lda_model.print_topics())
+
+        perp = lda_model.log_perplexity(validation['corpus'])
+        print(f"Perplexity score at t={t}: {perp}")
+
         models.append(lda_model)
 
     end_time = time.time()
@@ -177,10 +199,9 @@ def find_best_t(training, validation):
     plt.plot(ts, perps)
     plt.xlabel("Number of topics")
     plt.ylabel("Perplexity")
-    plt.savefig("perplexity_graph.pdf")
+    plt.savefig("perplexity_graph_new.pdf")
 
-    return int(t['t']), np.exp(-t['perplexity'])
-
+    return int(t['t']), t['perplexity']
 
 
 def main():
@@ -188,7 +209,6 @@ def main():
     valid_data = load_data(data_dir_path, "valid")
     lda(train_data['issue_context'], valid_data['issue_context'])
     
-
 
 if __name__ == '__main__':
     main()
