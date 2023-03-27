@@ -41,9 +41,40 @@ data_dir_path = "./tawosi_dataset/"
 
 data_frames = {"train": pd.DataFrame(), "valid": pd.DataFrame(), "test": pd.DataFrame()}
 
+def load_all_data(path, type):
+    if type not in ["train", "valid", "test"]:
+        print(f"Error loading data with type: {type}. Must be train, valid, or test.")
+        return
+
+    dataset = data_frames[type]
+
+    for file_name in os.listdir(path):
+        project_name = file_name.split("-")[0]
+        data_type = re.search(r'(train|valid|test)', file_name)
+
+        file_path = os.path.join(path, file_name)
+
+        if file_name.endswith(f"-{type}.csv"):
+            temp = pd.read_csv(file_path, usecols=['issuekey','storypoint','title','description_text'])
+
+            # add issue context
+            temp['issue_context'] = temp['title'].str.cat(temp['description_text'], sep=' ')
+
+            # add project name
+            temp['project'] = project_name
+
+            # remove title and description_text columns
+            temp = temp.drop(columns=['title','description_text'])
+
+            dataset = pd.concat([dataset, temp])
+
+    data_frames[type] = dataset
+    return dataset
+
+
 # Iterates over data files (csv's) and returns the issue context
 # for the specified type (train, valid, or test)
-def load_data(path, type, project, variant = "LHC-SE"):
+def load_project_data(path, type, project, variant = "LHC-SE"):
     if type not in ["train", "valid", "test"]:
         print(f"Error loading data with type: {type}. Must be train, valid, or test.")
         return
@@ -232,9 +263,10 @@ def find_best_t(training, validation):
 
 
 def main():
-    train_data = load_data(data_dir_path, type="train", project="ALOY", variant="LHC-TC-SE")
+    # train_data = load_project_data(data_dir_path, type="train", project="ALOY", variant="LHC-TC-SE")
+
+    train_data = load_all_data(data_dir_path, "train")
     print(train_data)
-    print(train_data.columns.tolist())
 
     # valid_data = load_data(data_dir_path, "valid")
     # lda(train_data['issue_context'], valid_data['issue_context'])
