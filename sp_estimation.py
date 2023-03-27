@@ -42,23 +42,50 @@ data_dir_path = "./tawosi_dataset/"
 data_frames = {"train": pd.DataFrame(), "valid": pd.DataFrame(), "test": pd.DataFrame()}
 
 # Iterates over data files (csv's) and returns the issue context
-# for the specified data_type (train, valid, or test)
-def load_data(data_dir_path, data_type):
-    if data_type not in ["train", "valid", "test"]:
-        print(f"Error loading data with type: {data_type}. Must be train, valid, or test.")
+# for the specified type (train, valid, or test)
+def load_data(path, type, project, variant = "LHC-SE"):
+    if type not in ["train", "valid", "test"]:
+        print(f"Error loading data with type: {type}. Must be train, valid, or test.")
         return
 
-    file_suffix = f"-{data_type}.csv"
-    data_frame = data_frames[data_type]
-    for file_name in os.listdir(data_dir_path):
-        if file_name.endswith(file_suffix):
-            file_path = os.path.join(data_dir_path, file_name)
-            df = pd.read_csv(file_path, usecols=['title', 'description_text'])
-            df['issue_context'] = df['title'].str.cat(df['description_text'], sep=' ')
-            data_frame = pd.concat([data_frame, df], ignore_index=True)
-    
-    data_frames[data_type] = data_frame
-    return data_frame[['issue_context']]
+    dataset = data_frames[type]
+
+    for file_name in os.listdir(path):
+        project_name = file_name.split("-")[0]
+        data_type = re.search(r'(train|valid|test)', file_name)
+
+        # skip file if not correct type + project
+        if data_type.group(0) != type: continue
+        if project != project_name: continue
+
+        file_path = os.path.join(path, file_name)
+
+        if file_name == f"{project}-{type}.csv":
+            dataset = pd.read_csv(file_path, usecols=['issuekey','storypoint','title','description_text'])
+
+            # add issue context
+            dataset['issue_context'] = dataset['title'].str.cat(dataset['description_text'], sep=' ')
+
+            # add project name
+            dataset['project'] = project
+
+            # remove title and description_text columns
+            dataset = dataset.drop(columns=['title','description_text'])
+        
+        # add other features (type, component, issue length)
+        if variant == "LHC-TC-SE":
+            dataset['issue_context_length'] = dataset['issue_context'].apply(len)
+
+            feature_file_name = f"{project_name}-{type}_features.csv"
+            file_path = os.path.join(path, feature_file_name)
+
+            if os.path.exists(file_path):
+                extra_features = pd.read_csv(file_path)
+                extra_features = extra_features.drop(columns=['issuekey'])
+                dataset = pd.concat([dataset, extra_features], axis=1)
+
+    data_frames[type] = dataset
+    return dataset
 
 
 def remove_urls(text):
@@ -205,9 +232,12 @@ def find_best_t(training, validation):
 
 
 def main():
-    train_data = load_data(data_dir_path, "train")
-    valid_data = load_data(data_dir_path, "valid")
-    lda(train_data['issue_context'], valid_data['issue_context'])
+    train_data = load_data(data_dir_path, type="train", project="ALOY", variant="LHC-TC-SE")
+    print(train_data)
+    print(train_data.columns.tolist())
+
+    # valid_data = load_data(data_dir_path, "valid")
+    # lda(train_data['issue_context'], valid_data['issue_context'])
     
 
 if __name__ == '__main__':
