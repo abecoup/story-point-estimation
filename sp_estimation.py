@@ -39,14 +39,13 @@ result_dir = "../results/"
 # directory of dataset 
 data_dir_path = "./tawosi_dataset/"
 
-data_frames = {"train": pd.DataFrame(), "valid": pd.DataFrame(), "test": pd.DataFrame()}
-
+all_data = {"train": pd.DataFrame(), "valid": pd.DataFrame(), "test": pd.DataFrame()}
 def load_all_data(path, type):
     if type not in ["train", "valid", "test"]:
         print(f"Error loading data with type: {type}. Must be train, valid, or test.")
         return
 
-    dataset = data_frames[type]
+    dataset = all_data[type]
 
     for file_name in os.listdir(path):
         project_name = file_name.split("-")[0]
@@ -68,10 +67,11 @@ def load_all_data(path, type):
 
             dataset = pd.concat([dataset, temp])
 
-    data_frames[type] = dataset
+    all_data[type] = dataset
     return dataset
 
 
+project_data = {"train": pd.DataFrame(), "valid": pd.DataFrame(), "test": pd.DataFrame()}
 # Iterates over data files (csv's) and returns the issue context
 # for the specified type (train, valid, or test)
 def load_project_data(path, type, project, variant = "LHC-SE"):
@@ -79,7 +79,7 @@ def load_project_data(path, type, project, variant = "LHC-SE"):
         print(f"Error loading data with type: {type}. Must be train, valid, or test.")
         return
 
-    dataset = data_frames[type]
+    dataset = project_data[type]
 
     for file_name in os.listdir(path):
         project_name = file_name.split("-")[0]
@@ -115,7 +115,7 @@ def load_project_data(path, type, project, variant = "LHC-SE"):
                 extra_features = extra_features.drop(columns=['issuekey'])
                 dataset = pd.concat([dataset, extra_features], axis=1)
 
-    data_frames[type] = dataset
+    project_data[type] = dataset
     return dataset
 
 
@@ -262,13 +262,44 @@ def find_best_t(training, validation):
     return int(t['t']), t['perplexity']
 
 
+## Clustering ##
+
+def cluster(data, lda_model):
+    # convert each issue into a bag-of-words representation
+    corpus = [Dictionary.doc2bow(issue.split()) for issue in data['issue_context']]
+
+    # create a dense vector representation for each issue using the LDA model
+    dense_vectors = [list(lda_model.get_document_topics(issue)) for issue in corpus]
+
+    # perform agglomerative hierarchical clustering with Ward's linkage criterion and cosine distance measure
+    k_range = range(3, int(len(dense_vectors)*0.9), 10)  # range of k values to explore
+    best_k = None
+    best_score = -1
+    for k in k_range:
+        clustering = AgglomerativeClustering(n_clusters=k, linkage='ward', affinity='cosine')
+        labels = clustering.fit_predict(dense_vectors)
+        score = silhouette_score(dense_vectors, labels)
+        if score > best_score:
+            best_k = k
+            best_score = score
+
+    # select the best k value and generate the clusters
+    clustering = AgglomerativeClustering(n_clusters=best_k, linkage='ward', affinity='cosine')
+    labels = clustering.fit_predict(dense_vectors)
+
+    # add cluster labels to the dataframe
+    data['cluster_labels'] = labels
+
+
+
 def main():
     # train_data = load_project_data(data_dir_path, type="train", project="ALOY", variant="LHC-TC-SE")
 
-    train_data = load_all_data(data_dir_path, "train")
+    pd.set_option('display.max_rows', None)
+    train_data = load_all_data(data_dir_path, "valid")
     print(train_data)
 
-    # valid_data = load_data(data_dir_path, "valid")
+    # valid_data = load_all_data(data_dir_path, "valid")
     # lda(train_data['issue_context'], valid_data['issue_context'])
     
 
