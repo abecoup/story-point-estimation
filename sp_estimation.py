@@ -24,7 +24,16 @@ from gensim.corpora import Dictionary
 from gensim.matutils import Sparse2Corpus
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics.pairwise import cosine_distances
+from scipy.spatial.distance import cosine
+from scipy.cluster.hierarchy import dendrogram, ward
+from sklearn.metrics.pairwise import euclidean_distances
+from matplotlib.backends.backend_pdf import PdfPages
+from scipy.spatial.distance import cdist
+from scipy.cluster.hierarchy import linkage, cut_tree
 from sklearn.metrics import silhouette_score
+import matplotlib.pyplot as plt
+import pickle
+
 
 import logging
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.DEBUG)
@@ -117,6 +126,12 @@ def load_project_data(path, type, project, variant = "LHC-SE"):
 
     project_data[type] = dataset
     return dataset
+
+
+def get_project_names(path):
+    files = os.listdir(path)
+    project_names = [file.split("-")[0] for file in files]
+    return list(set(project_names))
 
 
 def remove_urls(text):
@@ -263,44 +278,186 @@ def find_best_t(training, validation):
 
 
 ## Clustering ##
+def get_dtm_lda(training_text, validation_text, testing_text, lda_model):
+    vsm_train = vsm(training_text['issue_context'])
+    vsm_valid = vsm(validation_text['issue_context'])
+    vsm_test = vsm(testing_text['issue_context'])
+    
+    dtm_train = lda_model.get_document_topics(vsm_train['corpus'], minimum_probability=0)
+    dtm_valid = lda_model.get_document_topics(vsm_valid['corpus'], minimum_probability=0)
+    dtm_test = lda_model.get_document_topics(vsm_test['corpus'], minimum_probability=0)
+    
+    return {'train': dtm_train, 'valid': dtm_valid, 'test': dtm_test}
 
-def cluster(data, lda_model):
-    # convert each issue into a bag-of-words representation
-    corpus = [Dictionary.doc2bow(issue.split()) for issue in data['issue_context']]
 
-    # create a dense vector representation for each issue using the LDA model
-    dense_vectors = [list(lda_model.get_document_topics(issue)) for issue in corpus]
+def validate(data, test, dtm_train, dtm_test, eval_method='MdAE'):
+    means = data.groupby('labels')['storypoint'].mean()
+    medians = data.groupby('labels')['storypoint'].median()
 
-    # perform agglomerative hierarchical clustering with Ward's linkage criterion and cosine distance measure
-    k_range = range(3, int(len(dense_vectors)*0.9), 10)  # range of k values to explore
-    best_k = None
-    best_score = -1
-    for k in k_range:
-        clustering = AgglomerativeClustering(n_clusters=k, linkage='ward', affinity='cosine')
-        labels = clustering.fit_predict(dense_vectors)
-        score = silhouette_score(dense_vectors, labels)
-        if score > best_score:
-            best_k = k
-            best_score = score
+    distance = cdist(dtm_test, dtm_train, metric='cosine')
+    closest = np.argmin(distance, axis=1)
+    closest_labels = data['labels'].iloc[closest].values
 
-    # select the best k value and generate the clusters
-    clustering = AgglomerativeClustering(n_clusters=best_k, linkage='ward', affinity='cosine')
-    labels = clustering.fit_predict(dense_vectors)
+    results = pd.DataFrame({
+        'closest': closest,
+        'sp': test['storypoint'],
+        'closest_sp': data['storypoint'].iloc[closest].values,
+        'mean_cluster_sp': means[closest_labels].values,
+        'median_cluster_sp': medians[closest_labels].values
+    })
 
-    # add cluster labels to the dataframe
-    data['cluster_labels'] = labels
+    ae_sp_cluster_median = np.abs(results['sp'] - results['median_cluster_sp'])
+    mae = np.mean(ae_sp_cluster_median)
+    mdae = np.median(ae_sp_cluster_median)
+
+    return {'results': results, 'mae_mdae': (mae, mdae)}
+
+
+def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, method="ward", ev="sil", project_name=None, lda_model=None):
+    if project_name is None:
+        project_name = "All_projects"
+
+    dataset_size = dtm['train'].shape[0]
+    vocabulary_size = dtm['train'].shape[1]
+
+    if verbose:
+        print(f"Evaluation Based-on: {ev}")
+        print(f"Corpus Dimensions: {dtm['train'].shape}")
+
+    if distance is None:
+        if verbose:
+            print("Calculating distance matrix..")
+        distance = cosine_distances(dtm['train'], dtm['train'])
+        file_name = f"{data.prefix}_{project_name}_distance_{FE}.npy"
+        np.save(file_name, distance)
+        print(f"Distance matrix saved to {file_name}")
+
+    dendrogram = linkage(distance, method=method)
+    file_name = f"{data.prefix}_{project_name}_dendrogram_{FE}.npy"
+    np.save(file_name, dendrogram)
+    print(f"Dendrogram saved to {file_name}")
+
+    step = int(dataset_size * 0.1)
+    ks = list(range(3, dataset_size - step, step))
+    eval_gran = []
+
+    if verbose:
+        print("Looping through dendrogram to plot silhouette scores..")
+
+    for i in ks:
+        current = cut_tree(dendrogram, n_clusters=i).flatten()
+        sil = silhouette_score(distance, current, metric='precomputed')
+        data['labels'] = current
+        evals = validate(data, valid, dtm['train'], dtm['valid'], eval_method=ev)['mae_mdae']
+
+        eval_gran.append([i, sil, evals[0], evals[1]])
+
+        if verbose:
+            print(f"\rDone loop : {i}", end="")
+
+    eval_gran = pd.DataFrame(eval_gran, columns=["granularity", "silhouette", "MAE", "MdAE"])
+
+    file_name = f"{data.prefix}_{project_name}_gran_{FE}.npy"
+    np.save(file_name, eval_gran)
+    print(f"\nGranularity evaluation table is saved to {file_name}")
+
+    file_name = f"{data.prefix}_{project_name}_gran_plot_{FE}.pdf"
+    plt.plot(eval_gran["granularity"], eval_gran[["silhouette", "MAE", "MdAE"]])
+    plt.xlabel("Number of Clusters")
+    plt.ylabel("Evaluation Metrics: Silhouette, MAE and MdAE")
+    plt.title(f"Cluster Quality for {project_name}")
+    plt.legend(["Silhouette", "MAE", "MdAE"])
+    plt.savefig(file_name)
+    print(f"Plot successfully generated to {file_name}")
+
+    if ev == "sil":
+        k = eval_gran.loc[eval_gran["silhouette"].idxmax()]
+        print(f"\nBest K is {k['granularity']} Producing {ev} of {k['silhouette']}")
+    elif ev == "MAE":
+        k = eval_gran.loc[eval_gran["MAE"].idxmin()]
+        print(f"\nBest K is {k['granularity']} Producing {ev} of {k['MAE']}")
+    elif ev == "MdAE":
+        k = eval_gran.loc[eval_gran["MdAE"].idxmin()]
+        print(f"\nBest K is {k['granularity']} Producing {ev} of {k['MdAE']}")
+
+    return cut_tree(dendrogram, n_clusters=int(k['granularity'])).flatten()
 
 
 
 def main():
     # train_data = load_project_data(data_dir_path, type="train", project="ALOY", variant="LHC-TC-SE")
 
-    pd.set_option('display.max_rows', None)
-    train_data = load_all_data(data_dir_path, "valid")
-    print(train_data)
+    # Load LDA model
+    lda_model = LdaModel.load("./models/lda_30.model")
+    variant = "LHC-TC-SE"
 
-    # valid_data = load_all_data(data_dir_path, "valid")
-    # lda(train_data['issue_context'], valid_data['issue_context'])
+    for project_name in get_project_names(data_dir_path):
+        train_data = load_project_data(data_dir_path, "train", project_name, variant)
+        valid_data = load_project_data(data_dir_path, "valid", project_name, variant)
+        test_data = load_project_data(data_dir_path, "test", project_name, variant)
+
+        # Fitting LDA model to training, testing and validation data
+        dtm_lda = get_dtm_lda(train_data, valid_data, test_data, lda_model)
+
+        # grab extra features
+        if variant == "LHC-TC-SE":
+            train_extra = train_data.drop(columns=['issuekey', 'storypoint', 'issue_context', 'project'])
+            train_extra = pd.DataFrame(np.reshape(train_extra.values, (train_extra.shape[0], -1)))
+            assert np.isnan(train_extra.values.astype(np.float64)).sum() == 0, "There are missing values in the data"
+
+            valid_extra = valid_data.drop(columns=['issuekey', 'storypoint', 'issue_context', 'project'])
+            valid_extra = pd.DataFrame(np.reshape(valid_extra.values, (valid_extra.shape[0], -1)))
+            assert np.isnan(valid_extra.values.astype(np.float64)).sum() == 0, "There are missing values in the data"
+
+            test_extra = test_data.drop(columns=['issuekey', 'storypoint', 'issue_context', 'project'])
+            test_extra = pd.DataFrame(np.reshape(test_extra.values, (test_extra.shape[0], -1)))
+
+        # Merge fitted data with extra features if LHC-TC-SE
+        dtm = {}
+        if variant == "LHC-TC-SE":
+            dtm = {}
+            dtm['train'] = pd.concat([pd.DataFrame(dtm_lda['train']), train_extra], axis=1)
+            dtm['valid'] = pd.concat([pd.DataFrame(dtm_lda['valid']), valid_extra], axis=1)
+            dtm['test'] = pd.concat([pd.DataFrame(dtm_lda['test']), test_extra], axis=1)
+        else: # LHC-SE
+            dtm = dtm_lda
+        
+        assert dtm['train'].shape[1] == dtm['valid'].shape[1] == dtm['test'].shape[1], "The number of columns in train, valid, and test are not equal"
+
+        # perform clustering
+        train_data['labels'] = cluster_h(train_data, test_data, valid_data, dtm,
+                    FE = "LDA",
+                    verbose = True,
+                    project_name = project_name,
+                    ev = "MAE",
+                    lda_model = lda_model)
+
+        # find statistics per cluster
+        results = validate(data=train_data, test=test_data, dtm_train=dtm['train'], dtm_test=dtm['test'])['results']
+
+        # Save estimations
+        results.to_csv('../results/'+ project_name + '_results.csv', index=False)
+
+        # Print estimation statistics
+        ae_sp_closest = abs(results['sp'] - results['closest.sp'])
+        print("\nStory Point - Absolute Error when matching with closest point:\n")
+        print(ae_sp_closest.describe())
+        print("\nMean of Absolute Error: ", ae_sp_closest.mean())
+        print("Median of Absolute Error: ", ae_sp_closest.median())
+
+        ae_sp_cluster_mean = abs(results['sp'] - results['mean.cluster.sp'])
+        print("\nStory Point - Absolute Error when matching with cluster mean:\n")
+        print(ae_sp_cluster_mean.describe())
+        print("\nMean of Absolute Error: ", ae_sp_cluster_mean.mean())
+        print("Median of Absolute Error: ", ae_sp_cluster_mean.median())
+
+        ae_sp_cluster_median = abs(results['sp'] - results['median.cluster.sp'])
+        print("\nStory Point - Absolute Error when matching with cluster median:\n")
+        print(ae_sp_cluster_median.describe())
+        print("\nMean of Absolute Error: ", ae_sp_cluster_median.mean())
+        print("Median of Absolute Error: ", ae_sp_cluster_median.median())
+
+        print("\n########################################################################\n")
     
 
 if __name__ == '__main__':
