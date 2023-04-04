@@ -43,7 +43,7 @@ extended_stop_words = ["a", "aaaaa", "aaaaaa", "aaaaaaa", "aaaaaaaa", "aaaaaaaaa
 extended_stop_words = [word.replace("'", "") for word in extended_stop_words]
 
 # directory to save results
-result_dir = "../results/"
+result_dir = "./results/"
 
 # directory of dataset 
 data_dir_path = "./tawosi_dataset/"
@@ -278,16 +278,16 @@ def find_best_t(training, validation):
 
 
 ## Clustering ##
-def get_dtm_lda(training_text, validation_text, testing_text, lda_model):
-    vsm_train = vsm(training_text['issue_context'])
-    vsm_valid = vsm(validation_text['issue_context'])
-    vsm_test = vsm(testing_text['issue_context'])
+def get_dtm_lda(training, validation, testing, lda_model):
+    train_corpus = vsm(training['issue_context'])['corpus']
+    valid_corpus = vsm(validation['issue_context'])['corpus']
+    test_corpus = vsm(testing['issue_context'])['corpus']
     
-    dtm_train = lda_model.get_document_topics(vsm_train['corpus'], minimum_probability=0)
-    dtm_valid = lda_model.get_document_topics(vsm_valid['corpus'], minimum_probability=0)
-    dtm_test = lda_model.get_document_topics(vsm_test['corpus'], minimum_probability=0)
+    train_topics = [list(zip(*lda_model.get_document_topics(ic, minimum_probability=0)))[1] for ic in train_corpus]
+    valid_topics = [list(zip(*lda_model.get_document_topics(ic, minimum_probability=0)))[1] for ic in valid_corpus]
+    test_topics = [list(zip(*lda_model.get_document_topics(ic, minimum_probability=0)))[1] for ic in test_corpus]
     
-    return {'train': dtm_train, 'valid': dtm_valid, 'test': dtm_test}
+    return {'train': train_topics, 'valid': valid_topics, 'test': test_topics}
 
 
 def validate(data, test, dtm_train, dtm_test, eval_method='MdAE'):
@@ -327,14 +327,16 @@ def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, me
     if distance is None:
         if verbose:
             print("Calculating distance matrix..")
-        distance = cosine_distances(dtm['train'], dtm['train'])
-        file_name = f"{data.prefix}_{project_name}_distance_{FE}.npy"
-        np.save(file_name, distance)
+        distance = cdist(dtm['train'], dtm['train'], metric='cosine')
+        file_name = f"{result_dir}{project_name}_distance_{FE}.pkl"
+        with open(file_name, "wb") as f:
+            pickle.dump(distance, f)
         print(f"Distance matrix saved to {file_name}")
 
     dendrogram = linkage(distance, method=method)
-    file_name = f"{data.prefix}_{project_name}_dendrogram_{FE}.npy"
-    np.save(file_name, dendrogram)
+    file_name = f"{result_dir}{project_name}_dendrogram_{FE}.pkl"
+    with open(file_name, "wb") as f:
+        pickle.dump(dendrogram, f)
     print(f"Dendrogram saved to {file_name}")
 
     step = int(dataset_size * 0.1)
@@ -357,11 +359,12 @@ def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, me
 
     eval_gran = pd.DataFrame(eval_gran, columns=["granularity", "silhouette", "MAE", "MdAE"])
 
-    file_name = f"{data.prefix}_{project_name}_gran_{FE}.npy"
-    np.save(file_name, eval_gran)
+    file_name = f"{result_dir}{project_name}_gran_{FE}.pkl"
+    with open(file_name, "wb") as f:
+        pickle.dump(eval_gran, f)
     print(f"\nGranularity evaluation table is saved to {file_name}")
 
-    file_name = f"{data.prefix}_{project_name}_gran_plot_{FE}.pdf"
+    file_name = f"{result_dir}{project_name}_gran_plot_{FE}.pdf"
     plt.plot(eval_gran["granularity"], eval_gran[["silhouette", "MAE", "MdAE"]])
     plt.xlabel("Number of Clusters")
     plt.ylabel("Evaluation Metrics: Silhouette, MAE and MdAE")
@@ -388,7 +391,7 @@ def main():
     # train_data = load_project_data(data_dir_path, type="train", project="ALOY", variant="LHC-TC-SE")
 
     # Load LDA model
-    lda_model = LdaModel.load("./models/lda_30.model")
+    lda_model = LdaModel.load("./models/lda_10.model")
     variant = "LHC-TC-SE"
 
     for project_name in get_project_names(data_dir_path):
@@ -398,6 +401,7 @@ def main():
 
         # Fitting LDA model to training, testing and validation data
         dtm_lda = get_dtm_lda(train_data, valid_data, test_data, lda_model)
+        print(dtm_lda['train'])
 
         # grab extra features
         if variant == "LHC-TC-SE":
@@ -436,24 +440,24 @@ def main():
         results = validate(data=train_data, test=test_data, dtm_train=dtm['train'], dtm_test=dtm['test'])['results']
 
         # Save estimations
-        results.to_csv('../results/'+ project_name + '_results.csv', index=False)
+        results.to_csv(result_dir + project_name + '_results.csv', index=False)
 
         # Print estimation statistics
-        ae_sp_closest = abs(results['sp'] - results['closest.sp'])
+        ae_sp_closest = abs(results['sp'] - results['closest_sp'])
         print("\nStory Point - Absolute Error when matching with closest point:\n")
-        print(ae_sp_closest.describe())
+        print(ae_sp_closest.describe(include= 'all'))
         print("\nMean of Absolute Error: ", ae_sp_closest.mean())
         print("Median of Absolute Error: ", ae_sp_closest.median())
 
-        ae_sp_cluster_mean = abs(results['sp'] - results['mean.cluster.sp'])
+        ae_sp_cluster_mean = abs(results['sp'] - results['mean_cluster_sp'])
         print("\nStory Point - Absolute Error when matching with cluster mean:\n")
-        print(ae_sp_cluster_mean.describe())
+        print(ae_sp_cluster_mean.describe(include= 'all'))
         print("\nMean of Absolute Error: ", ae_sp_cluster_mean.mean())
         print("Median of Absolute Error: ", ae_sp_cluster_mean.median())
 
-        ae_sp_cluster_median = abs(results['sp'] - results['median.cluster.sp'])
+        ae_sp_cluster_median = abs(results['sp'] - results['median_cluster_sp'])
         print("\nStory Point - Absolute Error when matching with cluster median:\n")
-        print(ae_sp_cluster_median.describe())
+        print(ae_sp_cluster_median.describe(include= 'all'))
         print("\nMean of Absolute Error: ", ae_sp_cluster_median.mean())
         print("Median of Absolute Error: ", ae_sp_cluster_median.median())
 
