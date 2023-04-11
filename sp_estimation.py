@@ -200,8 +200,7 @@ def lda(train, valid=None, t=None):
             passes=20,
             chunksize=1000,
             eval_every=2,
-            gamma_threshold=0.001,
-            workers=36
+            gamma_threshold=0.001
         )
 
     end_time = time.time()
