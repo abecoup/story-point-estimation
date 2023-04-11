@@ -378,80 +378,82 @@ def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, me
 
 
 def main():
-    # train_data = load_all_data(data_dir_path, type="train")['issue_context']
-    # valid_data = load_all_data(data_dir_path, type="valid")['issue_context']
+    train_data = load_all_data(data_dir_path, type="train")['issue_context']
+    valid_data = load_all_data(data_dir_path, type="valid")['issue_context']
+
+    lda(train_data, valid=valid_data, t=2265)
 
     # Load LDA model
-    lda_model = LdaModel.load("./models/lda_30.model")
-    variant = "LHC-TC-SE"
+    # lda_model = LdaModel.load("./models/lda_30.model")
 
-    for project_name in get_project_names(data_dir_path):
-        train_data = load_project_data(data_dir_path, "train", project_name, variant)
-        valid_data = load_project_data(data_dir_path, "valid", project_name, variant)
-        test_data = load_project_data(data_dir_path, "test", project_name, variant)
+    # variant = "LHC-TC-SE"
+    # for project_name in get_project_names(data_dir_path):
+    #     train_data = load_project_data(data_dir_path, "train", project_name, variant)
+    #     valid_data = load_project_data(data_dir_path, "valid", project_name, variant)
+    #     test_data = load_project_data(data_dir_path, "test", project_name, variant)
 
-        # Fitting LDA model to training, testing and validation data
-        dtm_lda = get_dtm_lda(train_data, valid_data, test_data, lda_model)
+    #     # Fitting LDA model to training, testing and validation data
+    #     dtm_lda = get_dtm_lda(train_data, valid_data, test_data, lda_model)
 
-        # grab extra features
-        if variant == "LHC-TC-SE":
-            train_extra = train_data.drop(columns=['issuekey', 'storypoint', 'issue_context', 'project'])
-            train_extra = pd.DataFrame(np.reshape(train_extra.values, (train_extra.shape[0], -1)))
-            assert np.isnan(train_extra.values.astype(np.float64)).sum() == 0, "There are missing values in the data"
+    #     # grab extra features
+    #     if variant == "LHC-TC-SE":
+    #         train_extra = train_data.drop(columns=['issuekey', 'storypoint', 'issue_context', 'project'])
+    #         train_extra = pd.DataFrame(np.reshape(train_extra.values, (train_extra.shape[0], -1)))
+    #         assert np.isnan(train_extra.values.astype(np.float64)).sum() == 0, "There are missing values in the data"
 
-            valid_extra = valid_data.drop(columns=['issuekey', 'storypoint', 'issue_context', 'project'])
-            valid_extra = pd.DataFrame(np.reshape(valid_extra.values, (valid_extra.shape[0], -1)))
-            assert np.isnan(valid_extra.values.astype(np.float64)).sum() == 0, "There are missing values in the data"
+    #         valid_extra = valid_data.drop(columns=['issuekey', 'storypoint', 'issue_context', 'project'])
+    #         valid_extra = pd.DataFrame(np.reshape(valid_extra.values, (valid_extra.shape[0], -1)))
+    #         assert np.isnan(valid_extra.values.astype(np.float64)).sum() == 0, "There are missing values in the data"
 
-            test_extra = test_data.drop(columns=['issuekey', 'storypoint', 'issue_context', 'project'])
-            test_extra = pd.DataFrame(np.reshape(test_extra.values, (test_extra.shape[0], -1)))
+    #         test_extra = test_data.drop(columns=['issuekey', 'storypoint', 'issue_context', 'project'])
+    #         test_extra = pd.DataFrame(np.reshape(test_extra.values, (test_extra.shape[0], -1)))
 
-        # Merge fitted data with extra features if LHC-TC-SE
-        dtm = {}
-        if variant == "LHC-TC-SE":
-            dtm = {}
-            dtm['train'] = pd.concat([pd.DataFrame(dtm_lda['train']), train_extra], axis=1)
-            dtm['valid'] = pd.concat([pd.DataFrame(dtm_lda['valid']), valid_extra], axis=1)
-            dtm['test'] = pd.concat([pd.DataFrame(dtm_lda['test']), test_extra], axis=1)
-        else: # LHC-SE
-            dtm = dtm_lda
+    #     # Merge fitted data with extra features if LHC-TC-SE
+    #     dtm = {}
+    #     if variant == "LHC-TC-SE":
+    #         dtm = {}
+    #         dtm['train'] = pd.concat([pd.DataFrame(dtm_lda['train']), train_extra], axis=1)
+    #         dtm['valid'] = pd.concat([pd.DataFrame(dtm_lda['valid']), valid_extra], axis=1)
+    #         dtm['test'] = pd.concat([pd.DataFrame(dtm_lda['test']), test_extra], axis=1)
+    #     else: # LHC-SE
+    #         dtm = dtm_lda
         
-        assert dtm['train'].shape[1] == dtm['valid'].shape[1] == dtm['test'].shape[1], "The number of columns in train, valid, and test are not equal"
+    #     assert dtm['train'].shape[1] == dtm['valid'].shape[1] == dtm['test'].shape[1], "The number of columns in train, valid, and test are not equal"
 
-        # perform clustering
-        train_data['labels'] = cluster_h(train_data, test_data, valid_data, dtm,
-                    FE = "LDA",
-                    verbose = True,
-                    project_name = project_name,
-                    ev = "MAE",
-                    lda_model = lda_model)
+    #     # perform clustering
+    #     train_data['labels'] = cluster_h(train_data, test_data, valid_data, dtm,
+    #                 FE = "LDA",
+    #                 verbose = True,
+    #                 project_name = project_name,
+    #                 ev = "MAE",
+    #                 lda_model = lda_model)
 
-        # find statistics per cluster
-        results = validate(data=train_data, test=test_data, dtm_train=dtm['train'], dtm_test=dtm['test'])['results']
+    #     # find statistics per cluster
+    #     results = validate(data=train_data, test=test_data, dtm_train=dtm['train'], dtm_test=dtm['test'])['results']
 
-        # Save estimations
-        results.to_csv(result_dir + project_name + '_results.csv', index=False)
+    #     # Save estimations
+    #     results.to_csv(result_dir + project_name + '_results.csv', index=False)
 
-        # Print estimation statistics
-        ae_sp_closest = abs(results['sp'] - results['closest_sp'])
-        print("\nStory Point - Absolute Error when matching with closest point:\n")
-        print(ae_sp_closest.describe(include= 'all'))
-        print("\nMean of Absolute Error: ", ae_sp_closest.mean())
-        print("Median of Absolute Error: ", ae_sp_closest.median())
+    #     # Print estimation statistics
+    #     ae_sp_closest = abs(results['sp'] - results['closest_sp'])
+    #     print("\nStory Point - Absolute Error when matching with closest point:\n")
+    #     print(ae_sp_closest.describe(include= 'all'))
+    #     print("\nMean of Absolute Error: ", ae_sp_closest.mean())
+    #     print("Median of Absolute Error: ", ae_sp_closest.median())
 
-        ae_sp_cluster_mean = abs(results['sp'] - results['mean_cluster_sp'])
-        print("\nStory Point - Absolute Error when matching with cluster mean:\n")
-        print(ae_sp_cluster_mean.describe(include= 'all'))
-        print("\nMean of Absolute Error: ", ae_sp_cluster_mean.mean())
-        print("Median of Absolute Error: ", ae_sp_cluster_mean.median())
+    #     ae_sp_cluster_mean = abs(results['sp'] - results['mean_cluster_sp'])
+    #     print("\nStory Point - Absolute Error when matching with cluster mean:\n")
+    #     print(ae_sp_cluster_mean.describe(include= 'all'))
+    #     print("\nMean of Absolute Error: ", ae_sp_cluster_mean.mean())
+    #     print("Median of Absolute Error: ", ae_sp_cluster_mean.median())
 
-        ae_sp_cluster_median = abs(results['sp'] - results['median_cluster_sp'])
-        print("\nStory Point - Absolute Error when matching with cluster median:\n")
-        print(ae_sp_cluster_median.describe(include= 'all'))
-        print("\nMean of Absolute Error: ", ae_sp_cluster_median.mean())
-        print("Median of Absolute Error: ", ae_sp_cluster_median.median())
+    #     ae_sp_cluster_median = abs(results['sp'] - results['median_cluster_sp'])
+    #     print("\nStory Point - Absolute Error when matching with cluster median:\n")
+    #     print(ae_sp_cluster_median.describe(include= 'all'))
+    #     print("\nMean of Absolute Error: ", ae_sp_cluster_median.mean())
+    #     print("Median of Absolute Error: ", ae_sp_cluster_median.median())
 
-        print("\n########################################################################\n")
+    #     print("\n########################################################################\n")
     
 
 if __name__ == '__main__':
