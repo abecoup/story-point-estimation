@@ -9,41 +9,31 @@ import pandas as pd
 import numpy as np
 import time
 import re
-import gensim
-import sklearn
-import nltk
 import matplotlib.pyplot as plt
-from datetime import datetime
-from scipy.cluster.hierarchy import dendrogram, linkage
+from scipy.cluster.hierarchy import linkage
 from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import CountVectorizer
 from gensim.models.ldamodel import LdaModel
-from gensim.matutils import corpus2csc
-from gensim.models import CoherenceModel
 from gensim.corpora import Dictionary
 from gensim.matutils import Sparse2Corpus
-from sklearn.cluster import AgglomerativeClustering
-from sklearn.metrics.pairwise import cosine_distances
-from scipy.spatial.distance import cosine
-from scipy.cluster.hierarchy import dendrogram, ward
-from sklearn.metrics.pairwise import euclidean_distances
-from matplotlib.backends.backend_pdf import PdfPages
 from scipy.spatial.distance import cdist
 from scipy.cluster.hierarchy import linkage, cut_tree
 from sklearn.metrics import silhouette_score
 import matplotlib.pyplot as plt
 import pickle
+import warnings
 
+warnings.filterwarnings('ignore')
 
 import logging
-logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.DEBUG)
+# logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.DEBUG)
 
 # extended stop words list taken from ee_clust R code
 extended_stop_words = ["a", "aaaaa", "aaaaaa", "aaaaaaa", "aaaaaaaa", "aaaaaaaaaa", "about", "above", "across", "after", "again", "against", "all", "almost", "alone", "along", "already", "also", "although", "always", "am", "among", "an", "and", "another", "any", "anybody", "anyone", "anything", "anywhere", "are",  "aren't", "around", "as", "ask", "asked", "asking", "asks", "at", "away", "b", "back", "be", "became", "because", "become", "becomes", "been", "before", "began", "behind", "being", "beings", "below", "best", "better", "between", "big", "both", "but", "by", "c", "came", "can", "cannot", "can't", "case", "cases", "certain", "certainly", "clear", "clearly", "come", "could", "couldn't", "d", "did", "didn't", "differ", "different", "differently", "do", "does", "doesn't", "doing", "done", "don't", "down", "downed", "downing", "downs", "during", "e", "each", "early", "either", "end", "ended", "ending", "ends", "enough", "even", "evenly", "ever", "every", "everybody", "everyone", "everything", "everywhere", "f", "face", "faces", "fact", "facts", "far", "felt", "few", "find", "finds", "first", "for", "four", "from", "full", "fully", "further", "furthered", "furthering", "furthers", "g", "gave", "general", "generally", "get", "gets", "give", "given", "gives", "go", "going", "good", "goods", "got", "great", "greater", "greatest", "group", "grouped", "grouping", "groups", "h", "had", "hadn't", "has", "hasn't", "have", "haven't", "having", "he", "he'd", "he'll", "her", "here", "here's", "hers", "herself", "he's", "high", "higher", "highest", "him", "himself", "his", "how", "however", "how's", "i", "i'd", "if", "i'll", "i'm", "important", "in", "interest", "interested", "interesting", "interests", "into", "is", "isn't", "it", "its", "it's", "itself", "i've", "j", "just", "k", "keep", "keeps", "kind", "knew", "know", "known", "knows", "l", "large", "largely", "last", "later", "latest", "least", "less", "let", "lets", "let's", "like", "likely", "long", "longer", "longest", "m", "made", "make", "making", "man", "many", "may", "me", "member", "members", "men", "might", "more", "most", "mostly", "mr", "mrs", "much", "must", "mustn't", "my", "myself", "n", "necessary", "need", "needed", "needing", "needs", "never", "new", "newer", "newest", "next", "no", "nobody", "non", "noone", "nor", "not", "nothing", "now", "nowhere", "number", "numbers", "o", "of", "off", "often", "old", "older", "oldest", "on", "once", "one", "only", "open", "opened", "opening", "opens", "or", "order", "ordered", "ordering", "orders", "other", "others", "ought", "our", "ours", "ourselves", "out", "over", "own", "p", "part", "parted", "parting", "parts", "per", "perhaps", "place", "places", "point", "pointed", "pointing", "possible", "q", "quite", "r", "rather", "really", "right",  "s", "said", "same", "saw", "say", "says", "see", "seem", "seemed", "seeming", "seems", "sees",  "shall", "shan't", "she", "she'd", "she'll", "she's", "should", "shouldn't",  "since", "small",  "so", "some", "somebody", "someone", "something", "somewhere", "state", "states", "still", "such", "sure", "t", "take", "taken", "than", "that", "that's", "the", "their", "theirs", "them", "themselves", "then", "there", "therefore", "there's", "these", "they", "they'd", "they'll", "they're", "they've", "thing", "things", "think", "thinks", "this", "those", "though", "thought", "thoughts", "three", "through", "thus", "to", "today", "together", "too", "took", "toward",  "two", "u", "under", "until", "up", "upon", "us", "use", "used", "uses", "v", "very","via", "w", "want", "wanted", "wanting", "wants", "was", "wasn't", "way", "ways", "we", "we'd", "well", "we'll",  "went", "were", "we're", "weren't", "we've", "what", "what's", "when", "when's", "where", "where's", "whether", "which", "while", "who", "whole", "whom", "who's", "whose", "why", "why's", "will", "with", "within", "without", "won't", "work", "worked", "working", "works", "would", "wouldn't", "x", "y", "yes", "yet", "you", "you'd", "you'll", "your", "you're", "yours", "yourself", "yourselves", "you've", "z"]
 extended_stop_words = [word.replace("'", "") for word in extended_stop_words]
 
 # directory to save results
-result_dir = "./results/"
+result_dir = "./results3/"
 
 # directory of dataset 
 data_dir_path = "./tawosi_dataset/"
@@ -205,8 +195,8 @@ def lda(train, valid=None, t=None):
             id2word=train['id2word'],
             num_topics=t,
             alpha=1/t,
-            eta=0.1, # similir to delta
-            iterations=300,
+            eta='auto', # similir to delta
+            iterations=500,
             passes=20,
             chunksize=1000,
             eval_every=2,
@@ -388,10 +378,11 @@ def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, me
 
 
 def main():
-    # train_data = load_project_data(data_dir_path, type="train", project="ALOY", variant="LHC-TC-SE")
+    # train_data = load_all_data(data_dir_path, type="train")['issue_context']
+    # valid_data = load_all_data(data_dir_path, type="valid")['issue_context']
 
     # Load LDA model
-    lda_model = LdaModel.load("./models/lda_10.model")
+    lda_model = LdaModel.load("./models/lda_30.model")
     variant = "LHC-TC-SE"
 
     for project_name in get_project_names(data_dir_path):
@@ -401,7 +392,6 @@ def main():
 
         # Fitting LDA model to training, testing and validation data
         dtm_lda = get_dtm_lda(train_data, valid_data, test_data, lda_model)
-        print(dtm_lda['train'])
 
         # grab extra features
         if variant == "LHC-TC-SE":
