@@ -22,6 +22,7 @@ from sklearn.metrics import silhouette_score
 import matplotlib.pyplot as plt
 import pickle
 import warnings
+import csv
 
 warnings.filterwarnings('ignore')
 
@@ -319,15 +320,15 @@ def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, me
             print("Calculating distance matrix..")
         distance = cdist(dtm['train'], dtm['train'], metric='cosine')
         file_name = f"{result_dir}{project_name}_distance_{FE}.pkl"
-        with open(file_name, "wb") as f:
-            pickle.dump(distance, f)
-        print(f"Distance matrix saved to {file_name}")
+        # with open(file_name, "wb") as f:
+        #     pickle.dump(distance, f)
+        # print(f"Distance matrix saved to {file_name}")
 
     dendrogram = linkage(distance, method=method)
     file_name = f"{result_dir}{project_name}_dendrogram_{FE}.pkl"
-    with open(file_name, "wb") as f:
-        pickle.dump(dendrogram, f)
-    print(f"Dendrogram saved to {file_name}")
+    # with open(file_name, "wb") as f:
+    #     pickle.dump(dendrogram, f)
+    # print(f"Dendrogram saved to {file_name}")
 
     step = int(dataset_size * 0.1)
     ks = list(range(3, dataset_size - step, step))
@@ -350,18 +351,18 @@ def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, me
     eval_gran = pd.DataFrame(eval_gran, columns=["granularity", "silhouette", "MAE", "MdAE"])
 
     file_name = f"{result_dir}{project_name}_gran_{FE}.pkl"
-    with open(file_name, "wb") as f:
-        pickle.dump(eval_gran, f)
-    print(f"\nGranularity evaluation table is saved to {file_name}")
+    # with open(file_name, "wb") as f:
+    #     pickle.dump(eval_gran, f)
+    # print(f"\nGranularity evaluation table is saved to {file_name}")
 
     file_name = f"{result_dir}{project_name}_gran_plot_{FE}.pdf"
-    plt.plot(eval_gran["granularity"], eval_gran[["silhouette", "MAE", "MdAE"]])
-    plt.xlabel("Number of Clusters")
-    plt.ylabel("Evaluation Metrics: Silhouette, MAE and MdAE")
-    plt.title(f"Cluster Quality for {project_name}")
-    plt.legend(["Silhouette", "MAE", "MdAE"])
-    plt.savefig(file_name)
-    print(f"Plot successfully generated to {file_name}")
+    # plt.plot(eval_gran["granularity"], eval_gran[["silhouette", "MAE", "MdAE"]])
+    # plt.xlabel("Number of Clusters")
+    # plt.ylabel("Evaluation Metrics: Silhouette, MAE and MdAE")
+    # plt.title(f"Cluster Quality for {project_name}")
+    # plt.legend(["Silhouette", "MAE", "MdAE"])
+    # plt.savefig(file_name)
+    # print(f"Plot successfully generated to {file_name}")
 
     if ev == "sil":
         k = eval_gran.loc[eval_gran["silhouette"].idxmax()]
@@ -376,10 +377,27 @@ def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, me
     return cut_tree(dendrogram, n_clusters=int(k['granularity'])).flatten()
 
 
+def save_project_metrics(project_name, mae, mdae):
+    file_name = "project_metrics.csv"
+
+    # Check if the file exists, if not, create it and write the header
+    try:
+        with open(file_name, "x") as f:
+            writer = csv.writer(f)
+            writer.writerow(["project_name", "mae", "mdae"])
+    except FileExistsError:
+        pass
+
+    # Append the project metrics to the file
+    with open(file_name, "a") as f:
+        writer = csv.writer(f)
+        writer.writerow([project_name, mae, mdae])
+
 
 def main():
 
     # Load LDA model
+    print("Loading LDA model...")
     lda_model = LdaModel.load("./models/lda_2265.model")
 
     variant = "LHC-TC-SE"
@@ -425,10 +443,14 @@ def main():
                     lda_model = lda_model)
 
         # find statistics per cluster
-        results = validate(data=train_data, test=test_data, dtm_train=dtm['train'], dtm_test=dtm['test'])['results']
+        val_data = validate(data=train_data, test=test_data, dtm_train=dtm['train'], dtm_test=dtm['test'])
+
+        results = val_data['results']
 
         # Save estimations
-        results.to_csv(result_dir + project_name + '_results.csv', index=False)
+        # results.to_csv(result_dir + project_name + '_results.csv', index=False)
+
+        save_project_metrics(project_name, mae=val_data['mae_mdae'][0], mdae=val_data['mae_mdae'][1])
 
         # Print estimation statistics
         ae_sp_closest = abs(results['sp'] - results['closest_sp'])
