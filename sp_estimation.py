@@ -11,6 +11,7 @@ import time
 import re
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import linkage
+from scipy.cluster.hierarchy import dendrogram as scipy_dendrogram
 from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import CountVectorizer
 from gensim.models.ldamodel import LdaModel
@@ -34,7 +35,7 @@ extended_stop_words = ["a", "aaaaa", "aaaaaa", "aaaaaaa", "aaaaaaaa", "aaaaaaaaa
 extended_stop_words = [word.replace("'", "") for word in extended_stop_words]
 
 # directory to save results
-result_dir = "./results_2265/"
+result_dir = "./results_lhc-tc-se/"
 
 # directory of dataset 
 data_dir_path = "./tawosi_dataset/"
@@ -320,15 +321,30 @@ def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, me
             print("Calculating distance matrix..")
         distance = cdist(dtm['train'], dtm['train'], metric='cosine')
         file_name = f"{result_dir}{project_name}_distance_{FE}.pkl"
-        # with open(file_name, "wb") as f:
-        #     pickle.dump(distance, f)
-        # print(f"Distance matrix saved to {file_name}")
+        with open(file_name, "wb") as f:
+            pickle.dump(distance, f)
+        print(f"Distance matrix saved to {file_name}")
+
+
 
     dendrogram = linkage(distance, method=method)
-    file_name = f"{result_dir}{project_name}_dendrogram_{FE}.pkl"
-    # with open(file_name, "wb") as f:
-    #     pickle.dump(dendrogram, f)
-    # print(f"Dendrogram saved to {file_name}")
+    
+
+    # Visualize dendrogram
+    plt.figure(figsize=(12, 6))
+    try:
+        scipy_dendrogram(dendrogram)
+        plt.title(f"Dendrogram for {project_name}")
+        plt.xlabel("Issue-Context Distance Vectors")
+        plt.ylabel("Distance Measure")
+
+        # Save the dendrogram plot to a file
+        dendrogram_file_name = f"{result_dir}{project_name}_dendrogram_plot_{FE}.png"
+        plt.savefig(dendrogram_file_name)
+        plt.close()
+        print(f"Dendrogram plot saved to {dendrogram_file_name}")
+    except RecursionError:
+        print("Warning: Maximum recursion depth reached. Dendrogram plot skipped.")
 
     step = int(dataset_size * 0.1)
     ks = list(range(3, dataset_size - step, step))
@@ -350,19 +366,29 @@ def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, me
 
     eval_gran = pd.DataFrame(eval_gran, columns=["granularity", "silhouette", "MAE", "MdAE"])
 
-    file_name = f"{result_dir}{project_name}_gran_{FE}.pkl"
-    # with open(file_name, "wb") as f:
-    #     pickle.dump(eval_gran, f)
-    # print(f"\nGranularity evaluation table is saved to {file_name}")
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+    ax.axis("off")
+
+    table = plt.table(cellText=eval_gran.values, colLabels=eval_gran.columns, cellLoc='center', loc='center')
+    table.auto_set_font_size(False)
+    table.set_fontsize(12)
+    table.scale(1, 1.5)
+
+    file_name = f"{result_dir}{project_name}_gran_{FE}.png"
+    plt.savefig(file_name, bbox_inches="tight")
+    plt.close()
+
 
     file_name = f"{result_dir}{project_name}_gran_plot_{FE}.pdf"
-    # plt.plot(eval_gran["granularity"], eval_gran[["silhouette", "MAE", "MdAE"]])
-    # plt.xlabel("Number of Clusters")
-    # plt.ylabel("Evaluation Metrics: Silhouette, MAE and MdAE")
-    # plt.title(f"Cluster Quality for {project_name}")
-    # plt.legend(["Silhouette", "MAE", "MdAE"])
-    # plt.savefig(file_name)
-    # print(f"Plot successfully generated to {file_name}")
+    plt.plot(eval_gran["granularity"], eval_gran[["silhouette", "MAE", "MdAE"]])
+    plt.xlabel("Number of Clusters")
+    plt.ylabel("Evaluation Metrics: Silhouette, MAE and MdAE")
+    plt.title(f"Cluster Quality for {project_name}")
+    plt.legend(["Silhouette", "MAE", "MdAE"])
+    plt.savefig(file_name)
+    plt.close()
+    print(f"Plot successfully generated to {file_name}")
 
     if ev == "sil":
         k = eval_gran.loc[eval_gran["silhouette"].idxmax()]
@@ -378,7 +404,7 @@ def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, me
 
 
 def save_project_metrics(project_name, mae, mdae):
-    file_name = "project_metrics.csv"
+    file_name = "project_metrics_lhc-se.csv"
 
     # Check if the file exists, if not, create it and write the header
     try:
@@ -401,6 +427,7 @@ def main():
     lda_model = LdaModel.load("./models/lda_2265.model")
 
     variant = "LHC-TC-SE"
+
     for project_name in get_project_names(data_dir_path):
         train_data = load_project_data(data_dir_path, "train", project_name, variant)
         valid_data = load_project_data(data_dir_path, "valid", project_name, variant)
@@ -408,6 +435,7 @@ def main():
 
         # Fitting LDA model to training, testing and validation data
         dtm_lda = get_dtm_lda(train_data, valid_data, test_data, lda_model)
+        # print("DTM_LDA: ", dtm_lda['train'][0])
 
         # grab extra features
         if variant == "LHC-TC-SE":
@@ -425,14 +453,17 @@ def main():
         # Merge fitted data with extra features if LHC-TC-SE
         dtm = {}
         if variant == "LHC-TC-SE":
-            dtm = {}
             dtm['train'] = pd.concat([pd.DataFrame(dtm_lda['train']), train_extra], axis=1)
             dtm['valid'] = pd.concat([pd.DataFrame(dtm_lda['valid']), valid_extra], axis=1)
             dtm['test'] = pd.concat([pd.DataFrame(dtm_lda['test']), test_extra], axis=1)
         else: # LHC-SE
-            dtm = dtm_lda
+            dtm['train'] = pd.DataFrame(dtm_lda['train'])
+            dtm['valid'] = pd.DataFrame(dtm_lda['valid'])
+            dtm['test'] = pd.DataFrame(dtm_lda['test'])
         
         assert dtm['train'].shape[1] == dtm['valid'].shape[1] == dtm['test'].shape[1], "The number of columns in train, valid, and test are not equal"
+
+        # print("DTM_TRAIN: ", dtm['train'].head())
 
         # perform clustering
         train_data['labels'] = cluster_h(train_data, test_data, valid_data, dtm,
@@ -448,26 +479,26 @@ def main():
         results = val_data['results']
 
         # Save estimations
-        # results.to_csv(result_dir + project_name + '_results.csv', index=False)
+        results.to_csv(result_dir + project_name + '_results.csv', index=False)
 
-        save_project_metrics(project_name, mae=val_data['mae_mdae'][0], mdae=val_data['mae_mdae'][1])
+        # save_project_metrics(project_name, mae=val_data['mae_mdae'][0], mdae=val_data['mae_mdae'][1])
 
         # Print estimation statistics
         ae_sp_closest = abs(results['sp'] - results['closest_sp'])
         print("\nStory Point - Absolute Error when matching with closest point:\n")
-        print(ae_sp_closest.describe(include= 'all'))
+        # print(ae_sp_closest.describe(include= 'all'))
         print("\nMean of Absolute Error: ", ae_sp_closest.mean())
         print("Median of Absolute Error: ", ae_sp_closest.median())
 
         ae_sp_cluster_mean = abs(results['sp'] - results['mean_cluster_sp'])
         print("\nStory Point - Absolute Error when matching with cluster mean:\n")
-        print(ae_sp_cluster_mean.describe(include= 'all'))
+        # print(ae_sp_cluster_mean.describe(include= 'all'))
         print("\nMean of Absolute Error: ", ae_sp_cluster_mean.mean())
         print("Median of Absolute Error: ", ae_sp_cluster_mean.median())
 
         ae_sp_cluster_median = abs(results['sp'] - results['median_cluster_sp'])
         print("\nStory Point - Absolute Error when matching with cluster median:\n")
-        print(ae_sp_cluster_median.describe(include= 'all'))
+        # print(ae_sp_cluster_median.describe(include= 'all'))
         print("\nMean of Absolute Error: ", ae_sp_cluster_median.mean())
         print("Median of Absolute Error: ", ae_sp_cluster_median.median())
 
