@@ -40,47 +40,80 @@ result_dir = "./results_lhc-tc-se/"
 # directory of dataset 
 data_dir_path = "./tawosi_dataset/"
 
-all_data = {"train": pd.DataFrame(), "valid": pd.DataFrame(), "test": pd.DataFrame()}
+
+# -- HELPER FUNCTIONS --
+
+# Given path to data, parses list of project names
+def get_project_names(path):
+    files = os.listdir(path)
+    project_names = [file.split("-")[0] for file in files]
+    return list(set(project_names))
+
+
+# Used to save MAE and MdAE metrics
+def save_project_metrics(project_name, mae, mdae, variant):
+    file_name = f"project_metrics_{variant}.csv"
+
+    # Check if the file exists, if not, create it and write the header
+    try:
+        with open(file_name, "x") as f:
+            writer = csv.writer(f)
+            writer.writerow(["project_name", "mae", "mdae"])
+    except FileExistsError:
+        pass
+
+    # Append the project metrics to the file
+    with open(file_name, "a", newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow([project_name, mae, mdae])
+
+
+# Remove all non-alphanumeric characters
+def purify(text):
+    return re.sub(r'[^a-zA-Z0-9]+', ' ', text)
+
+
+def remove_urls(text):
+    return re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+#]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', ' ', text)
+
+
+# Gets all data based on type (train, valid, test), no project seperation
 def load_all_data(path, type):
     if type not in ["train", "valid", "test"]:
         print(f"Error loading data with type: {type}. Must be train, valid, or test.")
         return
 
-    dataset = all_data[type]
+    dataset = pd.DataFrame()
 
     for file_name in os.listdir(path):
         project_name = file_name.split("-")[0]
-        data_type = re.search(r'(train|valid|test)', file_name)
-
         file_path = os.path.join(path, file_name)
 
         if file_name.endswith(f"-{type}.csv"):
             temp = pd.read_csv(file_path, usecols=['issuekey','storypoint','title','description_text'])
 
-            # add issue context
+            # add issue context (title + description)
             temp['issue_context'] = temp['title'].str.cat(temp['description_text'], sep=' ')
+
+            # remove title and description cols
+            temp = temp.drop(columns=['title','description_text'])
 
             # add project name
             temp['project'] = project_name
 
-            # remove title and description_text columns
-            temp = temp.drop(columns=['title','description_text'])
-
             dataset = pd.concat([dataset, temp])
 
-    all_data[type] = dataset
     return dataset
 
 
-project_data = {"train": pd.DataFrame(), "valid": pd.DataFrame(), "test": pd.DataFrame()}
-# Iterates over data files (csv's) and returns the issue context
-# for the specified type (train, valid, or test)
+# Gets data based on project name AND type (train, valid, test)
+# If variant is LHC-TC-SE, adds extra features
 def load_project_data(path, type, project, variant = "LHC-SE"):
     if type not in ["train", "valid", "test"]:
         print(f"Error loading data with type: {type}. Must be train, valid, or test.")
         return
 
-    dataset = project_data[type]
+    dataset = pd.DataFrame()
 
     for file_name in os.listdir(path):
         project_name = file_name.split("-")[0]
@@ -95,14 +128,14 @@ def load_project_data(path, type, project, variant = "LHC-SE"):
         if file_name == f"{project}-{type}.csv":
             dataset = pd.read_csv(file_path, usecols=['issuekey','storypoint','title','description_text'])
 
-            # add issue context
+            # add issue context (title + description)
             dataset['issue_context'] = dataset['title'].str.cat(dataset['description_text'], sep=' ')
+
+            # remove title and description cols
+            dataset = dataset.drop(columns=['title','description_text'])
 
             # add project name
             dataset['project'] = project
-
-            # remove title and description_text columns
-            dataset = dataset.drop(columns=['title','description_text'])
         
         # add other features (type, component, issue length)
         if variant == "LHC-TC-SE":
@@ -116,33 +149,14 @@ def load_project_data(path, type, project, variant = "LHC-SE"):
                 extra_features = extra_features.drop(columns=['issuekey'])
                 dataset = pd.concat([dataset, extra_features], axis=1)
 
-    project_data[type] = dataset
     return dataset
 
-
-def get_project_names(path):
-    files = os.listdir(path)
-    project_names = [file.split("-")[0] for file in files]
-    return list(set(project_names))
+# -- ------ --------- --
 
 
-def remove_urls(text):
-    # Remove URLs
-    return re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+#]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', ' ', text)
 
-
-def purify(text):
-    # Remove all non-alphanumeric characters
-    return re.sub(r'[^a-zA-Z0-9]+', ' ', text)
-
-
-# Vectorizes and cleans data
-# Returns dict of 
-# 'data': passed data 
-# 'dtm': document term matrix
-# 'id2word': id,word pairs for genism LDA model
-# 'corpus': bag-of-words representation of issue-context's
-def vsm(data, weighting='tf'):
+# Performs pre-processing, tokenization, and vectorization of data
+def create_vector_space_model(data):
 
     # Remove URLs
     data = [remove_urls(issue_context) for issue_context in data]
@@ -171,20 +185,21 @@ def vsm(data, weighting='tf'):
     doc_lens = doc_term_matrix.sum(axis=1)
     assert not np.any(doc_lens == 0), "Some documents have zero length."
     
-    return {'data': data,
-            'dtm': doc_term_matrix,
-            'id2word': id2word,
-            'corpus': corpus}
+    return {'data': data, # pre-processed text
+            'dtm': doc_term_matrix, # document-term matrix
+            'id2word': id2word, # Gensim dictionary
+            'corpus': corpus} # Gensim corpus
 
 
 # Creates and returns LDA model.
 # If no number of topics (t) is provided then best t is calculated (time intensive)
-def lda(train, valid=None, t=None):
+def create_lda_model(train, valid, t=None):
     print("Generating LDA Model..\n")
 
-    train = vsm(train)
-    valid = vsm(valid)
+    train = create_vector_space_model(train)
+    valid = create_vector_space_model(valid)
 
+    # time/compute intensive
     if t is None:
         t_res = find_best_t(train, valid)
         print("Best t: ", t_res[0], " produced perplexity: ", t_res[1])
@@ -192,6 +207,7 @@ def lda(train, valid=None, t=None):
     
     start_time = time.time()
 
+    # Build LDA Model
     lda_model = LdaModel(
             corpus=Sparse2Corpus(train['dtm']),
             id2word=train['id2word'],
@@ -218,14 +234,14 @@ def lda(train, valid=None, t=None):
 
     return lda_model
 
+
 # Creates LDA models with various t values
 # Returns t value based on model with lowest perplexity
 def find_best_t(training, validation):
     # training/validation are sparse matrices
 
     start_time = time.time()
-    # ts = list(range(15, 2001, 500)) # change back to 250
-    ts = list(range(5, 16, 5))
+    ts = list(range(15, 2001, 250))
     models = []
     corpus = training['corpus']
     id2word = training['id2word']
@@ -271,9 +287,9 @@ def find_best_t(training, validation):
 
 ## Clustering ##
 def get_dtm_lda(training, validation, testing, lda_model):
-    train_corpus = vsm(training['issue_context'])['corpus']
-    valid_corpus = vsm(validation['issue_context'])['corpus']
-    test_corpus = vsm(testing['issue_context'])['corpus']
+    train_corpus = create_vector_space_model(training['issue_context'])['corpus']
+    valid_corpus = create_vector_space_model(validation['issue_context'])['corpus']
+    test_corpus = create_vector_space_model(testing['issue_context'])['corpus']
     
     train_topics = [list(zip(*lda_model.get_document_topics(ic, minimum_probability=0)))[1] for ic in train_corpus]
     valid_topics = [list(zip(*lda_model.get_document_topics(ic, minimum_probability=0)))[1] for ic in valid_corpus]
@@ -403,23 +419,6 @@ def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, me
     return cut_tree(dendrogram, n_clusters=int(k['granularity'])).flatten()
 
 
-def save_project_metrics(project_name, mae, mdae):
-    file_name = "project_metrics_lhc-se.csv"
-
-    # Check if the file exists, if not, create it and write the header
-    try:
-        with open(file_name, "x") as f:
-            writer = csv.writer(f)
-            writer.writerow(["project_name", "mae", "mdae"])
-    except FileExistsError:
-        pass
-
-    # Append the project metrics to the file
-    with open(file_name, "a") as f:
-        writer = csv.writer(f)
-        writer.writerow([project_name, mae, mdae])
-
-
 def main():
 
     # Load LDA model
@@ -481,7 +480,7 @@ def main():
         # Save estimations
         results.to_csv(result_dir + project_name + '_results.csv', index=False)
 
-        # save_project_metrics(project_name, mae=val_data['mae_mdae'][0], mdae=val_data['mae_mdae'][1])
+        # save_project_metrics(project_name, mae=val_data['mae_mdae'][0], mdae=val_data['mae_mdae'][1], variant)
 
         # Print estimation statistics
         ae_sp_closest = abs(results['sp'] - results['closest_sp'])
