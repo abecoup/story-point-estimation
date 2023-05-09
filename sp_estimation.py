@@ -241,7 +241,7 @@ def find_best_t(training, validation):
     # training/validation are sparse matrices
 
     start_time = time.time()
-    ts = list(range(15, 2001, 250))
+    ts = list(range(15, 2016, 250))
     models = []
     corpus = training['corpus']
     id2word = training['id2word']
@@ -253,8 +253,8 @@ def find_best_t(training, validation):
             id2word=id2word,
             num_topics=t,
             alpha=1/t,
-            eta=0.1, # similir to delta
-            iterations=300,
+            eta='auto', # similir to delta
+            iterations=500,
             passes=20,
             chunksize=1000,
             eval_every=2,
@@ -461,8 +461,6 @@ def main():
             dtm['test'] = pd.DataFrame(dtm_lda['test'])
         
         assert dtm['train'].shape[1] == dtm['valid'].shape[1] == dtm['test'].shape[1], "The number of columns in train, valid, and test are not equal"
-
-        # print("DTM_TRAIN: ", dtm['train'].head())
 
         # perform clustering
         train_data['labels'] = cluster_h(train_data, test_data, valid_data, dtm,
