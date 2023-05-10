@@ -1,5 +1,5 @@
-from sp_estimation import create_lda_model
-from sp_estimation import load_all_data
+from lda_clustering import create_lda_model
+from lda_clustering import load_all_data
 import sys
 
 def main():

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Author: Abraham Couperus
+# AUTHOR: Abraham Couperus
 
 # imports
 import os
@@ -34,14 +34,6 @@ import logging
 extended_stop_words = ["a", "aaaaa", "aaaaaa", "aaaaaaa", "aaaaaaaa", "aaaaaaaaaa", "about", "above", "across", "after", "again", "against", "all", "almost", "alone", "along", "already", "also", "although", "always", "am", "among", "an", "and", "another", "any", "anybody", "anyone", "anything", "anywhere", "are",  "aren't", "around", "as", "ask", "asked", "asking", "asks", "at", "away", "b", "back", "be", "became", "because", "become", "becomes", "been", "before", "began", "behind", "being", "beings", "below", "best", "better", "between", "big", "both", "but", "by", "c", "came", "can", "cannot", "can't", "case", "cases", "certain", "certainly", "clear", "clearly", "come", "could", "couldn't", "d", "did", "didn't", "differ", "different", "differently", "do", "does", "doesn't", "doing", "done", "don't", "down", "downed", "downing", "downs", "during", "e", "each", "early", "either", "end", "ended", "ending", "ends", "enough", "even", "evenly", "ever", "every", "everybody", "everyone", "everything", "everywhere", "f", "face", "faces", "fact", "facts", "far", "felt", "few", "find", "finds", "first", "for", "four", "from", "full", "fully", "further", "furthered", "furthering", "furthers", "g", "gave", "general", "generally", "get", "gets", "give", "given", "gives", "go", "going", "good", "goods", "got", "great", "greater", "greatest", "group", "grouped", "grouping", "groups", "h", "had", "hadn't", "has", "hasn't", "have", "haven't", "having", "he", "he'd", "he'll", "her", "here", "here's", "hers", "herself", "he's", "high", "higher", "highest", "him", "himself", "his", "how", "however", "how's", "i", "i'd", "if", "i'll", "i'm", "important", "in", "interest", "interested", "interesting", "interests", "into", "is", "isn't", "it", "its", "it's", "itself", "i've", "j", "just", "k", "keep", "keeps", "kind", "knew", "know", "known", "knows", "l", "large", "largely", "last", "later", "latest", "least", "less", "let", "lets", "let's", "like", "likely", "long", "longer", "longest", "m", "made", "make", "making", "man", "many", "may", "me", "member", "members", "men", "might", "more", "most", "mostly", "mr", "mrs", "much", "must", "mustn't", "my", "myself", "n", "necessary", "need", "needed", "needing", "needs", "never", "new", "newer", "newest", "next", "no", "nobody", "non", "noone", "nor", "not", "nothing", "now", "nowhere", "number", "numbers", "o", "of", "off", "often", "old", "older", "oldest", "on", "once", "one", "only", "open", "opened", "opening", "opens", "or", "order", "ordered", "ordering", "orders", "other", "others", "ought", "our", "ours", "ourselves", "out", "over", "own", "p", "part", "parted", "parting", "parts", "per", "perhaps", "place", "places", "point", "pointed", "pointing", "possible", "q", "quite", "r", "rather", "really", "right",  "s", "said", "same", "saw", "say", "says", "see", "seem", "seemed", "seeming", "seems", "sees",  "shall", "shan't", "she", "she'd", "she'll", "she's", "should", "shouldn't",  "since", "small",  "so", "some", "somebody", "someone", "something", "somewhere", "state", "states", "still", "such", "sure", "t", "take", "taken", "than", "that", "that's", "the", "their", "theirs", "them", "themselves", "then", "there", "therefore", "there's", "these", "they", "they'd", "they'll", "they're", "they've", "thing", "things", "think", "thinks", "this", "those", "though", "thought", "thoughts", "three", "through", "thus", "to", "today", "together", "too", "took", "toward",  "two", "u", "under", "until", "up", "upon", "us", "use", "used", "uses", "v", "very","via", "w", "want", "wanted", "wanting", "wants", "was", "wasn't", "way", "ways", "we", "we'd", "well", "we'll",  "went", "were", "we're", "weren't", "we've", "what", "what's", "when", "when's", "where", "where's", "whether", "which", "while", "who", "whole", "whom", "who's", "whose", "why", "why's", "will", "with", "within", "without", "won't", "work", "worked", "working", "works", "would", "wouldn't", "x", "y", "yes", "yet", "you", "you'd", "you'll", "your", "you're", "yours", "yourself", "yourselves", "you've", "z"]
 extended_stop_words = [word.replace("'", "") for word in extended_stop_words]
 
-# directory to save results
-result_dir = "./results_lhc-tc-se/"
-
-# directory of dataset 
-data_dir_path = "./tawosi_dataset/"
-
-
-# -- HELPER FUNCTIONS --
 
 # Given path to data, parses list of project names
 def get_project_names(path):
@@ -151,9 +143,6 @@ def load_project_data(path, type, project, variant = "LHC-SE"):
 
     return dataset
 
-# -- ------ --------- --
-
-
 
 # Performs pre-processing, tokenization, and vectorization of data
 def create_vector_space_model(data):
@@ -191,7 +180,7 @@ def create_vector_space_model(data):
             'corpus': corpus} # Gensim corpus
 
 
-# Creates and returns LDA model.
+# Creates and returns Genism LDA model.
 # If no number of topics (t) is provided then best t is calculated (time intensive)
 def create_lda_model(train, valid, t=None):
     print("Generating LDA Model..\n")
@@ -235,13 +224,12 @@ def create_lda_model(train, valid, t=None):
     return lda_model
 
 
-# Creates LDA models with various t values
+# Creates LDA models with various t values (8 models total)
 # Returns t value based on model with lowest perplexity
 def find_best_t(training, validation):
-    # training/validation are sparse matrices
 
     start_time = time.time()
-    ts = list(range(15, 2016, 250))
+    ts = list(range(15, 2016, 250)) # t value range
     models = []
     corpus = training['corpus']
     id2word = training['id2word']
@@ -285,8 +273,9 @@ def find_best_t(training, validation):
     return int(t['t']), t['perplexity']
 
 
-## Clustering ##
-def get_dtm_lda(training, validation, testing, lda_model):
+# Extracts the topic distributions for the training, validation, and testing datasets using the provided LDA model.
+# Returns a dictionary containing the topic distributions for each dataset.
+def extract_topic_distributions(training, validation, testing, lda_model):
     train_corpus = create_vector_space_model(training['issue_context'])['corpus']
     valid_corpus = create_vector_space_model(validation['issue_context'])['corpus']
     test_corpus = create_vector_space_model(testing['issue_context'])['corpus']
@@ -298,6 +287,9 @@ def get_dtm_lda(training, validation, testing, lda_model):
     return {'train': train_topics, 'valid': valid_topics, 'test': test_topics}
 
 
+# Calculates the mean and median absolute errors between the actual storypoints of test documents and the median
+# storypoints of the closest clusters. Returns a dictionary containing the evaluation results and the mean and
+# median absolute errors.
 def validate(data, test, dtm_train, dtm_test, eval_method='MdAE'):
     means = data.groupby('labels')['storypoint'].mean()
     medians = data.groupby('labels')['storypoint'].median()
@@ -321,7 +313,11 @@ def validate(data, test, dtm_train, dtm_test, eval_method='MdAE'):
     return {'results': results, 'mae_mdae': (mae, mdae)}
 
 
-def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, method="ward", ev="sil", project_name=None, lda_model=None):
+# Performs hierarchical clustering on the input data, iterates through different granularities (number of clusters),
+# and calculates evaluation metrics (silhouette score, MAE, and MdAE) for each granularity. Saves the evaluation
+# metrics in a table and plots them against the number of clusters. Returns the best clustering labels based on the
+# chosen evaluation metric (silhouette, MAE, or MdAE).
+def perform_clustering(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, method="ward", ev="sil", project_name=None, lda_model=None, result_dir="./"):
     if project_name is None:
         project_name = "All_projects"
 
@@ -332,6 +328,7 @@ def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, me
         print(f"Evaluation Based-on: {ev}")
         print(f"Corpus Dimensions: {dtm['train'].shape}")
 
+    # calculate cosine distance
     if distance is None:
         if verbose:
             print("Calculating distance matrix..")
@@ -341,12 +338,10 @@ def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, me
             pickle.dump(distance, f)
         print(f"Distance matrix saved to {file_name}")
 
-
-
+    # Perform hierarchical clustering
     dendrogram = linkage(distance, method=method)
     
-
-    # Visualize dendrogram
+    # Save dendrogram plot
     plt.figure(figsize=(12, 6))
     try:
         scipy_dendrogram(dendrogram)
@@ -362,6 +357,7 @@ def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, me
     except RecursionError:
         print("Warning: Maximum recursion depth reached. Dendrogram plot skipped.")
 
+    # Determine optimal granularity (number of clusters) using evaluation metrics
     step = int(dataset_size * 0.1)
     ks = list(range(3, dataset_size - step, step))
     eval_gran = []
@@ -382,20 +378,13 @@ def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, me
 
     eval_gran = pd.DataFrame(eval_gran, columns=["granularity", "silhouette", "MAE", "MdAE"])
 
+    # Save evaluation metrics table in pickle file
+    file_name = f"{result_dir}{project_name}_gran_{FE}.pkl"
+    with open(file_name, "wb") as f:
+        pickle.dump(eval_gran, f)
+    print(f"Evaluation metrics table saved to {file_name}")
 
-    fig, ax = plt.subplots(figsize=(12, 8))
-    ax.axis("off")
-
-    table = plt.table(cellText=eval_gran.values, colLabels=eval_gran.columns, cellLoc='center', loc='center')
-    table.auto_set_font_size(False)
-    table.set_fontsize(12)
-    table.scale(1, 1.5)
-
-    file_name = f"{result_dir}{project_name}_gran_{FE}.png"
-    plt.savefig(file_name, bbox_inches="tight")
-    plt.close()
-
-
+    # Save evaluation metrics plot as a PDF
     file_name = f"{result_dir}{project_name}_gran_plot_{FE}.pdf"
     plt.plot(eval_gran["granularity"], eval_gran[["silhouette", "MAE", "MdAE"]])
     plt.xlabel("Number of Clusters")
@@ -406,6 +395,7 @@ def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, me
     plt.close()
     print(f"Plot successfully generated to {file_name}")
 
+    # Determine best number of clusters (k) based on evaluation metric
     if ev == "sil":
         k = eval_gran.loc[eval_gran["silhouette"].idxmax()]
         print(f"\nBest K is {k['granularity']} Producing {ev} of {k['silhouette']}")
@@ -416,91 +406,5 @@ def cluster_h(data, test, valid, dtm, FE="LDA", distance=None, verbose=False, me
         k = eval_gran.loc[eval_gran["MdAE"].idxmin()]
         print(f"\nBest K is {k['granularity']} Producing {ev} of {k['MdAE']}")
 
+    # Cut dendrogram at k, returns clustering labels
     return cut_tree(dendrogram, n_clusters=int(k['granularity'])).flatten()
-
-
-def main():
-
-    # Load LDA model
-    print("Loading LDA model...")
-    lda_model = LdaModel.load("./models/lda_2265.model")
-
-    variant = "LHC-TC-SE"
-
-    for project_name in get_project_names(data_dir_path):
-        train_data = load_project_data(data_dir_path, "train", project_name, variant)
-        valid_data = load_project_data(data_dir_path, "valid", project_name, variant)
-        test_data = load_project_data(data_dir_path, "test", project_name, variant)
-
-        # Fitting LDA model to training, testing and validation data
-        dtm_lda = get_dtm_lda(train_data, valid_data, test_data, lda_model)
-        # print("DTM_LDA: ", dtm_lda['train'][0])
-
-        # grab extra features
-        if variant == "LHC-TC-SE":
-            train_extra = train_data.drop(columns=['issuekey', 'storypoint', 'issue_context', 'project'])
-            train_extra = pd.DataFrame(np.reshape(train_extra.values, (train_extra.shape[0], -1)))
-            assert np.isnan(train_extra.values.astype(np.float64)).sum() == 0, "There are missing values in the data"
-
-            valid_extra = valid_data.drop(columns=['issuekey', 'storypoint', 'issue_context', 'project'])
-            valid_extra = pd.DataFrame(np.reshape(valid_extra.values, (valid_extra.shape[0], -1)))
-            assert np.isnan(valid_extra.values.astype(np.float64)).sum() == 0, "There are missing values in the data"
-
-            test_extra = test_data.drop(columns=['issuekey', 'storypoint', 'issue_context', 'project'])
-            test_extra = pd.DataFrame(np.reshape(test_extra.values, (test_extra.shape[0], -1)))
-
-        # Merge fitted data with extra features if LHC-TC-SE
-        dtm = {}
-        if variant == "LHC-TC-SE":
-            dtm['train'] = pd.concat([pd.DataFrame(dtm_lda['train']), train_extra], axis=1)
-            dtm['valid'] = pd.concat([pd.DataFrame(dtm_lda['valid']), valid_extra], axis=1)
-            dtm['test'] = pd.concat([pd.DataFrame(dtm_lda['test']), test_extra], axis=1)
-        else: # LHC-SE
-            dtm['train'] = pd.DataFrame(dtm_lda['train'])
-            dtm['valid'] = pd.DataFrame(dtm_lda['valid'])
-            dtm['test'] = pd.DataFrame(dtm_lda['test'])
-        
-        assert dtm['train'].shape[1] == dtm['valid'].shape[1] == dtm['test'].shape[1], "The number of columns in train, valid, and test are not equal"
-
-        # perform clustering
-        train_data['labels'] = cluster_h(train_data, test_data, valid_data, dtm,
-                    FE = "LDA",
-                    verbose = True,
-                    project_name = project_name,
-                    ev = "MAE",
-                    lda_model = lda_model)
-
-        # find statistics per cluster
-        val_data = validate(data=train_data, test=test_data, dtm_train=dtm['train'], dtm_test=dtm['test'])
-
-        results = val_data['results']
-
-        # Save estimations
-        results.to_csv(result_dir + project_name + '_results.csv', index=False)
-
-        # save_project_metrics(project_name, mae=val_data['mae_mdae'][0], mdae=val_data['mae_mdae'][1], variant)
-
-        # Print estimation statistics
-        ae_sp_closest = abs(results['sp'] - results['closest_sp'])
-        print("\nStory Point - Absolute Error when matching with closest point:\n")
-        # print(ae_sp_closest.describe(include= 'all'))
-        print("\nMean of Absolute Error: ", ae_sp_closest.mean())
-        print("Median of Absolute Error: ", ae_sp_closest.median())
-
-        ae_sp_cluster_mean = abs(results['sp'] - results['mean_cluster_sp'])
-        print("\nStory Point - Absolute Error when matching with cluster mean:\n")
-        # print(ae_sp_cluster_mean.describe(include= 'all'))
-        print("\nMean of Absolute Error: ", ae_sp_cluster_mean.mean())
-        print("Median of Absolute Error: ", ae_sp_cluster_mean.median())
-
-        ae_sp_cluster_median = abs(results['sp'] - results['median_cluster_sp'])
-        print("\nStory Point - Absolute Error when matching with cluster median:\n")
-        # print(ae_sp_cluster_median.describe(include= 'all'))
-        print("\nMean of Absolute Error: ", ae_sp_cluster_median.mean())
-        print("Median of Absolute Error: ", ae_sp_cluster_median.median())
-
-        print("\n########################################################################\n")
-    
-
-if __name__ == '__main__':
-    main()
