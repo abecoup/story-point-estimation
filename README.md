@@ -4,6 +4,8 @@ This repository aims to provide further information and content relevant to the 
 
 This work serves as my masters capstone research at Rochester Institute of Technology during the Spring 2023 semester.
 
+To install dependencies simply run: `pip install -r requirements.txt`.
+
 # How to train the LDA model:
 
 `python generate_lda_model.py [PATH TO DATASET] [NUMBER OF TOPICS]`
